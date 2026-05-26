@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.elfboard.com)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(node -e \"require\\('docx'\\)\")",
+      "Bash(npm install *)",
+      "Bash(node *)",
+      "Bash(npm root *)",
+      "Bash(NODE_PATH=\"C:/Users/Only_/AppData/Roaming/npm/node_modules\" node generate_prd.js)",
+      "Bash(pandoc \"E:/ClaudeCode/Language_learner/PRD_端侧AI语言学习机.docx\" -t markdown --wrap=none)",
+      "Bash(git clone *)",
+      "Bash(curl -sL \"https://api.github.com/repos/kajweb/dict/contents/\")",
+      "WebFetch(domain:mwm.ai)",
+      "WebFetch(domain:apps.apple.com)",
+      "Bash(kill %1)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
