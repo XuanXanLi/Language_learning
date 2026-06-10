@@ -266,11 +266,18 @@ Line C: 应用层与交互逻辑 (Person C)
 
 ### Line C 完成 (PC端开发)
 
-- [x] **C1: 词汇库构建** — 200词 CET-4 种子数据 (JSON + SQLite), 含音标/释义/例句/话题标签
-- [x] **C2: LLM 提示词原型** — 三层提示词架构 (系统层/会话层/轮次级), PromptBuilder + ConversationManager
+- [x] **C1: 词汇库构建** — 6600+ CET-4/6 词 (kajweb/dict) + SQLite 8.3MB
+- [x] **C2: LLM 提示词原型** — 三层提示词架构 (系统层/会话层/中文焦点层), PromptBuilder + ConversationManager
 - [x] **C3: 词汇状态机 + SRS 引擎** — 五阶段状态机 (unknown→introduced→attempted→learning→mastered), SM-2 间隔复习
-- [x] **C4: Qt 对话界面** — 聊天气泡 + 状态指示器 + 词汇摘要面板, 500×700 PC开发版窗口
-- [x] **测试覆盖** — 83 个单元测试全部通过 (vocabulary_repository, state_machine, sm2_srs, srs_scheduler, prompt_builder, conversation_manager)
+- [x] **C4: Qt 对话界面** — 横屏三栏布局 (角色区/对话区/词汇面板), 1000×600, 卡通狐狸 QPainter 绘制
+- [x] **C5: 中文焦点词驱动** — 用户中文词→AI 翻译→英文词汇追踪 (target→used→learning)
+- [x] **Git 仓库** — GitHub: XuanXanLi/Language_learning, 分支策略 main/feature
+- [x] **测试覆盖** — 91 个单元测试全部通过
+
+### Line C 已知问题
+
+- [ ] **LC-ISSUE-1**: AI 回复追踪了全部 CET 词，应只追踪中文翻译对应的词
+- [ ] **LC-ISSUE-2**: 同一词出现"目标词"和"你用过"双重标签，需去重合并
 
 ### Line A (硬件与系统平台)
 

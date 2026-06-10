@@ -49,6 +49,50 @@ export CLOUD_API_KEY=sk-your-key-here
 PYTHONPATH=src python src/main.py --llm cloud
 ```
 
+## Git 工作流与代码管理
+
+远程仓库：https://github.com/XuanXanLi/Language_learning.git
+
+### 日常提交流程
+
+改完代码后：
+```bash
+git add -A
+git commit -m "简短描述做了什么改动"
+git push
+```
+
+### 分支策略
+
+- `main` 分支 = 稳定版本，只有确认没问题才推
+- 开发新功能前先开分支，避免弄坏 main：
+
+```bash
+# 开新分支做实验
+git checkout -b feature/功能名
+
+# 改代码... 测试...
+
+# 搞砸了？回到 main 的干净状态
+git checkout main
+
+# 满意了？合入 main
+git checkout main
+git merge feature/功能名
+git push
+```
+
+### 代码回流
+
+任何时候想回到初始版本：
+```bash
+git checkout main        # 回到主分支，一切恢复原样
+```
+
+当用户说"更新代码""提交代码""推代码""push"时，执行日常提交流程。
+当用户说"开分支""做新功能"时，先开分支再改代码。
+修改代码前（开分支后），必须遵守规则 5 征得用户同意。
+
 ## 用户角色与教学要求
 
 当前用户是 **Line C 负责人**，同时是 **Linux 开发新手**。

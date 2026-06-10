@@ -1,14 +1,13 @@
-"""VocaAI 风格的对话管理器 — Line C 总指挥。
+"""对话管理器 — Line C 总指挥。
 
-核心理念：不预设"今天学哪几个词"。用户在自然对话中遇到和使用的
-所有 CET 词汇都由系统在后台追踪。
+核心理念：用户说中文词 → LLM 先翻译再回答 → 用户主动用出英文 → 系统追踪。
 
 每轮对话流程：
-  1. 扫描用户消息中的 CET 词汇 → 更新状态
-  2. 构建 Prompt（话题驱动，含最近遇到的词）
+  1. 提取用户消息中的中文词（焦点词）和英文 CET 词
+  2. 构建 Prompt（中文焦点词优先，让 LLM 先翻译再回答）
   3. 调用 LLM 获取回复
-  4. 扫描 LLM 回复中的 CET 词汇 → 更新状态
-  5. 定期评估：哪些词可以进入 SRS 复习、哪些是薄弱词
+  4. 扫描 LLM 回复（不做词汇追踪，仅记录上下文）
+  5. 用户后续使用英文词 → 追踪 "你用过" → "复习中"
 """
 
 import re
@@ -52,11 +51,7 @@ STOP_WORDS: Set[str] = {
     "what's", "that's", "there's", "here's", "let's",
 }
 
-# 评估间隔：每 N 轮触发一次词汇评估
-EVALUATION_INTERVAL = 5
-# 薄弱词阈值：见过超过 N 轮还没用过 → 标记为薄弱词
-WEAK_WORD_THRESHOLD = 5
-# 掌握阈值：用户主动使用同一词 ≥ N 次 → 进入 LEARNING
+# 掌握阈值：用户主动使用同一词 ≥ N 次 → 进入 SRS 复习
 MASTERY_THRESHOLD = 2
 
 
@@ -67,8 +62,8 @@ class ConversationManager(QObject):
     - message_received: 有新消息 (text: str, is_user: bool)
     - status_changed:   状态变化 (status: str)
     - word_event:       词汇事件 (word: str, event: str, state: str)
-                        event: "seen" (LLM引入), "used" (用户使用),
-                               "learning" (进入复习), "weak" (标记薄弱)
+                        event: "target" (AI翻译引入), "used" (用户使用),
+                               "learning" (进入复习)
     """
 
     message_received = pyqtSignal(str, bool)
@@ -97,14 +92,14 @@ class ConversationManager(QObject):
         self.srs = SRSScheduler()
 
         # ── 词汇追踪（会话级）──
-        # LLM 用过的 CET 词 → `{词: 首次出现轮数}`
-        self._words_seen: Dict[str, int] = {}
-        # 用户用过的 CET 词 → `{词: 使用次数}`
+        # 用户用过的 CET 英文词 → `{词: 使用次数}`
         self._words_used: Dict[str, int] = defaultdict(int)
-        # 本次会话所有遇到的 CET 词（按顺序，用于 Prompt）
+        # 本次会话所有出现的 CET 词（按顺序，给 Prompt 用）
         self._recent_words: List[str] = []
-        # 薄弱词：见过但用户一直没用过的
-        self._weak_words: List[str] = []
+        # 用户说过的中文词（焦点词）→ `{词: 首次出现轮数}`
+        self._chinese_focus: Dict[str, int] = {}
+        # 最近一轮的中文词（只给当前 Prompt 用，下一轮覆盖）
+        self._current_chinese: List[str] = []
         # 已经发射过"进入SRS"信号的词，避免重复发射
         self._learning_emitted: Set[str] = set()
 
@@ -118,10 +113,10 @@ class ConversationManager(QObject):
         self.topic = topic
         self.turn_count = 0
         self.conversation_history = []
-        self._words_seen = {}
         self._words_used = defaultdict(int)
         self._recent_words = []
-        self._weak_words = []
+        self._chinese_focus = {}
+        self._current_chinese = []
         self._learning_emitted = set()
         self._update_status("idle")
 
@@ -137,46 +132,54 @@ class ConversationManager(QObject):
         self.message_received.emit(text, True)
         self.turn_count += 1
 
-        # 2. 扫描用户消息中的 CET 词汇
+        # 2. 提取中文焦点词（只做 Prompt 输入，不发射事件）
+        chinese_words = self._extract_chinese(text)
+        for cw in chinese_words:
+            if cw not in self._chinese_focus:
+                self._chinese_focus[cw] = self.turn_count
+
+        # 3. 扫描用户消息中的英文 CET 词汇
         user_words = self._scan_message(text, speaker="user")
 
-        # 3. 切换到"思考中"
+        # 4. 切换到"思考中"
         self._update_status("thinking")
 
-        # 4. 将用户消息加入对话历史
+        # 5. 将用户消息加入对话历史
         self.conversation_history.append({"role": "user", "content": text})
 
-        # 5. 构建 Prompt
+        # 6. 构建 Prompt（中文焦点词优先）
+        current_focus = chinese_words if chinese_words else self._current_chinese
         system_prompt = self.prompt_builder.build(
             recent_words=self._recent_words[-20:],
-            weak_words=self._get_current_weak_words(),
+            chinese_words=current_focus,
             preferred_topic=self.topic,
         )
         session_ctx = self.prompt_builder.build_session_context(
             recent_words=self._recent_words[-10:],
+            chinese_words=current_focus,
             turns_this_session=self.turn_count,
         )
 
-        # 6. 调用 LLM（现在 LLM 能看到用户刚发的消息了）
+        # 7. 调用 LLM
         response = self.llm.chat(
             system_prompt=system_prompt + "\n" + session_ctx,
             messages=self.conversation_history,
         )
 
-        # 7. 显示 LLM 回复
+        # 8. 显示 LLM 回复
         self.message_received.emit(response.text, False)
 
-        # 8. 将 LLM 回复加入对话历史
+        # 9. 将 LLM 回复加入对话历史
         self.conversation_history.append({"role": "assistant", "content": response.text})
 
-        # 9. 扫描 LLM 回复中的 CET 词汇
-        self._scan_message(response.text, speaker="llm")
+        # 10. 扫描 LLM 回复中的 CET 词汇（只记录上下文，不触发词汇事件）
+        self._scan_llm_response(response.text)
 
-        # 10. 定期评估
-        if self.turn_count % EVALUATION_INTERVAL == 0:
-            self._evaluate_progress()
+        # 11. 更新当前中文焦点（保留上一轮的，如果没有新的话）
+        if chinese_words:
+            self._current_chinese = chinese_words
 
-        # 11. 语音输出（如果 TTS 可用）
+        # 12. 语音输出（如果 TTS 可用）
         self._update_status("speaking")
         if self.tts and self.tts.is_available():
             self.tts.speak(response.text)
@@ -189,9 +192,8 @@ class ConversationManager(QObject):
         return {
             "topic": self.topic,
             "turns": self.turn_count,
-            "words_seen": sorted(self._words_seen.keys()),
+            "chinese_focus": sorted(self._chinese_focus.keys()),
             "words_used": dict(self._words_used),
-            "weak_words": self._weak_words,
         }
 
     def get_recent_words(self, limit: int = 20) -> List[str]:
@@ -202,13 +204,12 @@ class ConversationManager(QObject):
     # ── 内部方法 ──
 
     def _extract_words(self, text: str) -> List[str]:
-        """从句子中提取有意义的单词。
+        """从句子中提取有意义的英文单词。
 
         - 转小写
         - 去掉标点符号
         - 过滤停用词和长度 ≤2 的词
         """
-        # 去掉标点
         cleaned = re.sub(r"[^\w\s']", " ", text.lower())
         raw_words = cleaned.split()
 
@@ -216,6 +217,15 @@ class ConversationManager(QObject):
             w for w in raw_words
             if w not in STOP_WORDS and len(w) > 2
         ]
+
+    @staticmethod
+    def _extract_chinese(text: str) -> List[str]:
+        """从句子中提取连续的中文字符块。
+
+        "how to say 异性 in english so i can 概括 boy and girl"
+        → ["异性", "概括"]
+        """
+        return re.findall(r"[一-鿿]+", text)
 
     def _batch_lookup(self, words: List[str]) -> Dict[str, str]:
         """批量查询一组词在词库中的状态。
@@ -237,9 +247,8 @@ class ConversationManager(QObject):
         return {w: db_words.get(w, "N/A") for w in words}
 
     def _scan_message(self, text: str, speaker: str) -> List[str]:
-        """扫描一条消息中出现的 CET 词汇，并更新状态。
+        """扫描用户消息中的英文 CET 词汇，更新状态。
 
-        speaker: "user" 或 "llm"
         返回: 这条消息中在词库中命中的词列表
         """
         words = self._extract_words(text)
@@ -251,48 +260,37 @@ class ConversationManager(QObject):
 
         for word in cet_words:
             current_state = lookup[word]
-
-            if speaker == "llm":
-                # LLM 用了这个词 → 用户"见过"
-                self._record_word_seen(word, current_state)
-            else:
-                # 用户用了这个词 → "试过"
-                self._record_word_used(word, current_state)
+            self._record_word_used(word, current_state)
 
         return cet_words
 
-    def _record_word_seen(self, word: str, current_state: str):
-        """LLM 在回复中使用了某个 CET 词。"""
-        if word not in self._words_seen:
-            self._words_seen[word] = self.turn_count
-        self._recent_words.append(word)
-
-        if current_state == "UNKNOWN":
-            # 第一次见 → INTRODUCED
-            self.repo.update_word_state(word, VocabularyState.INTRODUCED)
-            self.word_event.emit(word, "seen", "INTRODUCED")
+    def _scan_llm_response(self, text: str):
+        """扫描 LLM 回复中的 CET 词汇 → 发射 target 事件。"""
+        words = self._extract_words(text)
+        if not words:
+            return
+        lookup = self._batch_lookup(words)
+        cet_words = [w for w, s in lookup.items() if s != "N/A"]
+        for word in cet_words:
+            self._recent_words.append(word)
+            current_state = lookup[word]
+            if current_state == "UNKNOWN":
+                self.repo.update_word_state(word, VocabularyState.INTRODUCED)
+                self.word_event.emit(word, "target", "INTRODUCED")
 
     def _record_word_used(self, word: str, current_state: str):
-        """用户在输入中使用了某个 CET 词。"""
+        """用户在输入中使用了某个英文 CET 词。"""
         self._words_used[word] += 1
         use_count = self._words_used[word]
 
-        if current_state == "UNKNOWN":
-            # 用户自证认识 → 跳过 INTRODUCED，直接 ATTEMPTED
+        if current_state in ("UNKNOWN", "INTRODUCED"):
+            # 用户第一次主动用这个词 → ATTEMPTED
             self.repo.update_word_state(word, VocabularyState.ATTEMPTED)
             self.word_event.emit(word, "used", "ATTEMPTED")
-            # 同时记入 seen 列表（虽然跳级了）
-            if word not in self._words_seen:
-                self._words_seen[word] = self.turn_count
             self._recent_words.append(word)
 
-        elif current_state == "INTRODUCED":
-            # 用户学以致用 → ATTEMPTED
-            self.repo.update_word_state(word, VocabularyState.ATTEMPTED)
-            self.word_event.emit(word, "used", "ATTEMPTED")
-
         elif current_state == "ATTEMPTED" and use_count >= MASTERY_THRESHOLD:
-            # 多次正确使用 → 进入 SRS 复习（不重复发射信号）
+            # 多次使用 → 进入 SRS 复习
             if word not in self._learning_emitted:
                 self.repo.update_word_state(word, VocabularyState.LEARNING)
                 self.srs.schedule(word, quality=4)
@@ -300,35 +298,11 @@ class ConversationManager(QObject):
                 self._learning_emitted.add(word)
 
         elif current_state == "LEARNING":
-            # 在复习中的词，记录一次正向使用 → SRS review
+            # 在复习中的词，记录一次正向使用
             self.srs.schedule(word, quality=5)
 
-    def _evaluate_progress(self):
-        """定期评估：检测薄弱词。"""
-        current_turn = self.turn_count
-
-        # 找出"见过超过 N 轮但用户从未用过"的词 → 薄弱词
-        for word, first_seen_turn in self._words_seen.items():
-            if word in self._words_used:
-                continue  # 用户已经用过了，不是薄弱词
-            if (
-                current_turn - first_seen_turn >= WEAK_WORD_THRESHOLD
-                and word not in self._weak_words
-            ):
-                self._weak_words.append(word)
-                self.word_event.emit(word, "weak", self._get_db_state(word))
-
-    def _get_current_weak_words(self) -> List[str]:
-        """获取当前的薄弱词列表。"""
-        result = []
-        for word, first_seen in self._words_seen.items():
-            if word not in self._words_used:
-                if self.turn_count - first_seen >= WEAK_WORD_THRESHOLD:
-                    result.append(word)
-        return result
-
     def _get_db_state(self, word: str) -> str:
-        """查询一个词在数据库中的当前状态。"""
+        """查询一个词在数据库中的当前状态。测试用。"""
         row = self.repo._conn.execute(
             "SELECT state FROM words WHERE word = ?", (word,)
         ).fetchone()

@@ -2,6 +2,8 @@
 
 ## Now
 
+- [ ] **LC-ISSUE-1: AI 回复词汇追踪范围过大** — 当前 `_scan_llm_response` 扫描 AI 回复中的所有 CET 词汇。正确逻辑：只追踪 AI 翻译中文词时产出的英文词（即"AI 复述用户中文意思"那段里的词），不应追踪后续普通对话里的 CET 词。
+- [ ] **LC-ISSUE-2: 同一词双重状态** — 一个词同时出现在"目标词"和"你用过"中（AI 引入→target 事件，用户后续使用→used 事件，面板没有去重合并）。正确逻辑：一个词面板上只显示一个标签，默认显示最高阶段的状态（学习中 > 你用过 > 目标词）。
 - [ ] **A1: ELF2环境搭建** — 烧写官方Ubuntu镜像，确认NPU驱动版本，安装基础工具链 (gcc, cmake, python3, git)。验证 `cat /sys/kernel/debug/rknpu/version` 返回的NPU驱动版本。
 - [ ] **B1: 研究rkllama完整管线** — Clone并尝试编译rkllama项目，分析其代码结构（VAD→ASR→LLM→TTS如何串联），输出一份管线数据流分析文档。
 

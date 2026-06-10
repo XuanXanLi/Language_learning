@@ -1,12 +1,12 @@
-"""ConversationManager 集成测试（VocaAI 风格）。
+"""ConversationManager 集成测试。
 
 覆盖：
 - 话题启动会话
-- 全量扫描用户/LLM消息中的CET词汇
-- 状态自动更新（UNKNOWN→INTRODUCED→ATTEMPTED→LEARNING）
+- 用户消息中英文CET词汇扫描
+- 中文焦点词提取
+- 状态自动更新（用户使用→ATTEMPTED→LEARNING）
 - 停用词过滤
 - 批量数据库查询
-- 薄弱词检测
 - 信号发射
 """
 import pytest
@@ -141,8 +141,7 @@ class TestConversationManager:
         assert "hiking" in manager._words_used
 
     def test_handle_message_scans_llm_response(self, manager):
-        """LLM 回复包含 CET 词汇 → 应该被追踪。"""
-        # 用定制的 MockLLM，确保回复包含已知词
+        """LLM 回复中的 CET 词汇 → 记入 _recent_words + 发射 target 事件。"""
         custom_llm = MockLLM(responses=[
             "I love to explore new places and discover hidden gems."
         ])
@@ -150,8 +149,11 @@ class TestConversationManager:
         mgr.start_session(topic="travel")
         mgr.handle_user_message("What do you like to do?")
 
-        assert "explore" in mgr._words_seen
-        assert "discover" in mgr._words_seen
+        assert "explore" in mgr._recent_words
+        assert "discover" in mgr._recent_words
+        # 状态应该在数据库里变成 INTRODUCED
+        words = mgr.repo.get_words_by_state(VocabularyState.INTRODUCED)
+        assert any(w.word == "explore" for w in words)
 
     def test_user_skips_to_attempted(self, manager):
         """用户用了词库里有的词但从未被引入 → 直接 ATTEMPTED（跳级）"""
@@ -163,15 +165,20 @@ class TestConversationManager:
         words = manager.repo.get_words_by_state(VocabularyState.ATTEMPTED)
         assert any(w.word == "curious" for w in words)
 
-    def test_llm_introduces_word(self, manager):
-        """LLM 用了未知词 → INTRODUCED。"""
-        custom_llm = MockLLM(responses=["You seem curious about the world!"])
-        mgr = ConversationManager(llm=custom_llm, repository=manager.repo)
-        mgr.start_session(topic="daily life")
-        mgr.handle_user_message("Hello!")
+    def test_chinese_extraction(self, manager):
+        """用户输入含中文词 → 正确提取。"""
+        text = "how to say 异性 in english so i can 概括 boy and girl"
+        chinese = manager._extract_chinese(text)
+        assert "异性" in chinese
+        assert "概括" in chinese
+        assert len(chinese) == 2
 
-        words = mgr.repo.get_words_by_state(VocabularyState.INTRODUCED)
-        assert any(w.word == "curious" for w in words)
+    def test_chinese_focus_tracking(self, manager):
+        """中文焦点词 → 记入 _chinese_focus（不做 UI 事件）。"""
+        manager.start_session(topic="daily life")
+        manager.handle_user_message("how to say 探索 in english?")
+
+        assert "探索" in manager._chinese_focus
 
     def test_multiple_uses_trigger_learning(self, manager):
         """用户多次正确使用同一个词 → 进入 LEARNING。"""
@@ -187,22 +194,22 @@ class TestConversationManager:
         state_after_2 = manager._get_db_state("curious")
         assert state_after_2 == "LEARNING"
 
-    def test_weak_word_detection(self, manager):
-        """LLM 引入了词但用户一直不用 → 薄弱词。
+    def test_ai_target_word_event(self, manager, qapp):
+        """AI 回复引入 CET 词 → 发射 target 信号。"""
+        events = []
 
-        注意：WEAK_WORD_THRESHOLD=5，且在每 5 轮时触发评估。
-        所以需要 >=10 轮才能确保在某次评估中 轮数差 >= 5。
-        """
-        custom_llm = MockLLM(responses=[
-            "I think you'd love to explore new things.",
-        ] * 15)  # 所有回复都含 "explore"
+        def on_event(word, event, state):
+            events.append((word, event, state))
+
+        custom_llm = MockLLM(responses=["You seem curious about the world!"])
         mgr = ConversationManager(llm=custom_llm, repository=manager.repo)
+        mgr.word_event.connect(on_event)
         mgr.start_session(topic="daily life")
+        mgr.handle_user_message("Hello!")
 
-        for i in range(10):
-            mgr.handle_user_message("OK, tell me something else.")
-
-        assert "explore" in mgr._weak_words
+        target_events = [e for e in events if e[1] == "target"]
+        assert len(target_events) >= 1
+        assert target_events[0][0] == "curious"
 
     def test_word_event_signals(self, manager, qapp):
         """word_event 信号应该正确发射。"""
