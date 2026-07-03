@@ -11,14 +11,19 @@
 """
 
 import re
+from datetime import datetime
 from typing import Dict, List, Set, Optional
 from collections import defaultdict
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
+from ..domain.learning_event import LearningEventType
 from ..domain.vocabulary_state import VocabularyState
+from ..engine.learning_evaluator import LearningEvaluator
+from ..engine.mastery_scorer import MasteryScorer
 from ..engine.prompt_builder import PromptBuilder
 from ..engine.srs_scheduler import SRSScheduler
+from ..engine.target_word_tracker import TargetWordTracker
 from ..llm.base import BaseLLM
 from ..tts.base import BaseTTS
 
@@ -90,8 +95,14 @@ class ConversationManager(QObject):
 
         # 引擎
         self.srs = SRSScheduler()
+        self.evaluator = LearningEvaluator(
+            llm=llm,
+            use_llm=(getattr(llm, "name", "") == "CloudLLM"),
+        )
+        self.mastery_scorer = MasteryScorer()
+        self.target_tracker = TargetWordTracker()
 
-        # ── 词汇追踪（会话级）──
+        #  ── 词汇追踪（会话级）──
         # 用户用过的 CET 英文词 → `{词: 使用次数}`
         self._words_used: Dict[str, int] = defaultdict(int)
         # 本次会话所有出现的 CET 词（按顺序，给 Prompt 用）
@@ -102,6 +113,11 @@ class ConversationManager(QObject):
         self._current_chinese: List[str] = []
         # 已经发射过"进入SRS"信号的词，避免重复发射
         self._learning_emitted: Set[str] = set()
+        # 本次会话学习总结用的数据
+        self._target_words: Set[str] = set()
+        self._correct_words: Set[str] = set()
+        self._wrong_words: Dict[str, str] = {}
+        self._pending_correction: Optional[dict] = None
 
     # ── 公开方法 ──
 
@@ -118,6 +134,11 @@ class ConversationManager(QObject):
         self._chinese_focus = {}
         self._current_chinese = []
         self._learning_emitted = set()
+        self._target_words = set()
+        self._correct_words = set()
+        self._wrong_words = {}
+        self._pending_correction = None
+        self.target_tracker.reset()
         self._update_status("idle")
 
     def handle_user_message(self, text: str):
@@ -134,6 +155,8 @@ class ConversationManager(QObject):
 
         # 2. 提取中文焦点词（只做 Prompt 输入，不发射事件）
         chinese_words = self._extract_chinese(text)
+        if chinese_words:
+            self.target_tracker.set_focus(chinese_words)
         for cw in chinese_words:
             if cw not in self._chinese_focus:
                 self._chinese_focus[cw] = self.turn_count
@@ -175,11 +198,14 @@ class ConversationManager(QObject):
         # 10. 扫描 LLM 回复中的 CET 词汇（只记录上下文，不触发词汇事件）
         self._scan_llm_response(response.text)
 
-        # 11. 更新当前中文焦点（保留上一轮的，如果没有新的话）
+        # 11. 评估用户输入是否命中当前目标词
+        self._evaluate_learning_turn(text)
+
+        # 12. 更新当前中文焦点（保留上一轮的，如果没有新的话）
         if chinese_words:
             self._current_chinese = chinese_words
 
-        # 12. 语音输出（如果 TTS 可用）
+        # 13. 语音输出（如果 TTS 可用）
         self._update_status("speaking")
         if self.tts and self.tts.is_available():
             self.tts.speak(response.text)
@@ -189,11 +215,23 @@ class ConversationManager(QObject):
 
     def get_session_summary(self) -> dict:
         """返回当前会话的词汇追踪摘要。"""
+        mastery_scores = {}
+        for word in sorted(self._target_words | set(self._words_used.keys())):
+            mastery = self.repo.get_word_mastery(word)
+            if mastery:
+                mastery_scores[word] = mastery["mastery_score"]
+
         return {
             "topic": self.topic,
             "turns": self.turn_count,
             "chinese_focus": sorted(self._chinese_focus.keys()),
+            "target_words": sorted(self._target_words),
             "words_used": dict(self._words_used),
+            "correct_words": sorted(self._correct_words),
+            "wrong_words": dict(self._wrong_words),
+            "mastery_scores": mastery_scores,
+            "review_due": self.srs.get_due_words(),
+            "pending_correction": dict(self._pending_correction) if self._pending_correction else None,
         }
 
     def get_recent_words(self, limit: int = 20) -> List[str]:
@@ -273,19 +311,43 @@ class ConversationManager(QObject):
         cet_words = [w for w, s in lookup.items() if s != "N/A"]
         for word in cet_words:
             self._recent_words.append(word)
-            current_state = lookup[word]
+
+        if self._current_chinese or self.target_tracker.has_active_targets():
+            candidate_targets = self.target_tracker.ingest_assistant_response(text)
+        else:
+            candidate_targets = cet_words[:3]
+
+        for word in candidate_targets:
+            current_state = lookup.get(word)
+            if current_state is None or current_state == "N/A":
+                continue
             if current_state == "UNKNOWN":
                 self.repo.update_word_state(word, VocabularyState.INTRODUCED)
-                self.word_event.emit(word, "target", "INTRODUCED")
+            self._target_words.add(word)
+            if word not in self._recent_words:
+                self._recent_words.append(word)
+            self._record_learning_progress(
+                word=word,
+                event_type=LearningEventType.INTRODUCED,
+                quality=None,
+            )
+            self.word_event.emit(word, "target", "INTRODUCED")
 
     def _record_word_used(self, word: str, current_state: str):
         """用户在输入中使用了某个英文 CET 词。"""
         self._words_used[word] += 1
         use_count = self._words_used[word]
+        evaluations = self.evaluator.evaluate(word, [word])
+        quality = evaluations[0].quality if evaluations else 4
 
         if current_state in ("UNKNOWN", "INTRODUCED"):
             # 用户第一次主动用这个词 → ATTEMPTED
             self.repo.update_word_state(word, VocabularyState.ATTEMPTED)
+            self._record_learning_progress(
+                word=word,
+                event_type=LearningEventType.CORRECT_USAGE,
+                quality=quality,
+            )
             self.word_event.emit(word, "used", "ATTEMPTED")
             self._recent_words.append(word)
 
@@ -293,13 +355,181 @@ class ConversationManager(QObject):
             # 多次使用 → 进入 SRS 复习
             if word not in self._learning_emitted:
                 self.repo.update_word_state(word, VocabularyState.LEARNING)
-                self.srs.schedule(word, quality=4)
+                self.srs.schedule(word, quality=quality)
+                self._record_learning_progress(
+                    word=word,
+                    event_type=LearningEventType.REVIEW_PASSED,
+                    quality=quality,
+                )
                 self.word_event.emit(word, "learning", "LEARNING")
                 self._learning_emitted.add(word)
 
         elif current_state == "LEARNING":
             # 在复习中的词，记录一次正向使用
             self.srs.schedule(word, quality=5)
+            self._record_learning_progress(
+                word=word,
+                event_type=LearningEventType.CORRECT_USAGE,
+                quality=5,
+            )
+
+    def _record_learning_progress(
+        self,
+        word: str,
+        event_type: LearningEventType,
+        quality: Optional[int],
+        user_text: str = "",
+        ai_feedback: str = "",
+        error_type: Optional[str] = None,
+    ):
+        """记录学习事件并更新掌握度。"""
+        existing = self.repo.get_word_mastery(word) or {}
+        current_score = existing.get("mastery_score", 0)
+        new_score, delta = self.mastery_scorer.score_event(
+            current_score=current_score,
+            event_type=event_type,
+            quality=quality,
+        )
+        now = datetime.now().isoformat()
+
+        seen_count = existing.get("seen_count", 0)
+        attempt_count = existing.get("attempt_count", 0)
+        correct_count = existing.get("correct_count", 0)
+        wrong_count = existing.get("wrong_count", 0)
+
+        if event_type == LearningEventType.INTRODUCED:
+            seen_count += 1
+        if event_type in (
+            LearningEventType.ATTEMPTED,
+            LearningEventType.CORRECT_USAGE,
+            LearningEventType.WRONG_USAGE,
+            LearningEventType.REVIEW_PASSED,
+            LearningEventType.REVIEW_FAILED,
+        ):
+            attempt_count += 1
+        if event_type in (LearningEventType.CORRECT_USAGE, LearningEventType.REVIEW_PASSED):
+            correct_count += 1
+        if event_type in (LearningEventType.WRONG_USAGE, LearningEventType.REVIEW_FAILED):
+            wrong_count += 1
+
+        self.repo.update_word_mastery(
+            word=word,
+            mastery_score=new_score,
+            seen_count=seen_count,
+            attempt_count=attempt_count,
+            correct_count=correct_count,
+            wrong_count=wrong_count,
+            last_seen_at=now,
+            last_attempted_at=now if attempt_count else None,
+            last_quality=quality,
+        )
+        self.repo.record_learning_event(
+            word=word,
+            event_type=event_type.value,
+            quality=quality,
+            mastery_delta=delta,
+            user_text=user_text,
+            ai_feedback=ai_feedback,
+            error_type=error_type,
+        )
+
+    def _evaluate_learning_turn(self, user_text: str):
+        """评估当前轮的学习表现，并更新掌握度与摘要。
+
+        自由聊天阶段采用轻纠错策略：
+        - 有 pending correction 时，强制评估并反馈这个词。
+        - 没有 pending correction 时，只在用户主动尝试目标词时评分。
+        - 不因为“没有用到目标词”立刻弹出纠错，避免正常聊天被打断。
+        """
+        target_words = self._collect_target_words(user_text)
+        if not target_words:
+            return
+
+        self._target_words.update(target_words)
+        results = self.evaluator.evaluate(user_text, target_words)
+
+        for result in results[:1]:
+            if result.attempted and result.correct:
+                self._correct_words.add(result.word)
+                if self._pending_correction and self._pending_correction.get("word") == result.word:
+                    self._pending_correction = None
+                self._record_learning_progress(
+                    word=result.word,
+                    event_type=LearningEventType.CORRECT_USAGE,
+                    quality=result.quality,
+                    user_text=user_text,
+                    ai_feedback=result.correction or "",
+                )
+                if self.repo.update_word_state(result.word, VocabularyState.ATTEMPTED):
+                    pass
+                if self._words_used[result.word] >= MASTERY_THRESHOLD and result.word not in self._learning_emitted:
+                    self.repo.update_word_state(result.word, VocabularyState.LEARNING)
+                    self.srs.schedule(result.word, quality=result.quality)
+                    self._record_learning_progress(
+                        word=result.word,
+                        event_type=LearningEventType.REVIEW_PASSED,
+                        quality=result.quality,
+                        user_text=user_text,
+                        ai_feedback=result.correction or "",
+                    )
+                    self.word_event.emit(result.word, "learning", "LEARNING")
+                    self._learning_emitted.add(result.word)
+
+            elif result.attempted and not result.correct:
+                self._wrong_words[result.word] = result.error_type or "wrong_usage"
+                self._pending_correction = {
+                    "word": result.word,
+                    "correction": result.correction,
+                    "explanation": result.explanation,
+                }
+                self._record_learning_progress(
+                    word=result.word,
+                    event_type=LearningEventType.WRONG_USAGE,
+                    quality=result.quality,
+                    user_text=user_text,
+                    ai_feedback=result.correction or "",
+                    error_type=result.error_type,
+                )
+                self._emit_correction_feedback(result)
+
+            elif self._pending_correction:
+                self._record_learning_progress(
+                    word=result.word,
+                    event_type=LearningEventType.ATTEMPTED,
+                    quality=result.quality,
+                    user_text=user_text,
+                    ai_feedback=result.correction or "",
+                    error_type=result.error_type,
+                )
+                self._emit_correction_feedback(result)
+
+    def _collect_target_words(self, user_text: str) -> List[str]:
+        """收集当前轮需要评估的目标词。"""
+        if self._pending_correction:
+            return [self._pending_correction["word"]]
+
+        active_target = self.target_tracker.get_current_target()
+        if active_target and active_target in self._extract_words(user_text):
+            return [active_target]
+
+        for word in sorted(self._target_words):
+            if word in self._extract_words(user_text):
+                return [word]
+
+        return []
+
+    def _emit_correction_feedback(self, result):
+        """把纠错反馈显示到对话区。"""
+        if not result.correction and not result.explanation:
+            return
+
+        lines = [f"[纠错] {result.word}"]
+        if result.correction:
+            lines.append(f"建议：{result.correction}")
+        if result.explanation:
+            lines.append(f"原因：{result.explanation}")
+        feedback = "\n".join(lines)
+        self.message_received.emit(feedback, False)
 
     def _get_db_state(self, word: str) -> str:
         """查询一个词在数据库中的当前状态。测试用。"""

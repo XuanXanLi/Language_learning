@@ -1,0 +1,214 @@
+{
+  "version": 1,
+  "fetch_date": "2026-07-04",
+  "categories": {
+    "music": [
+      {
+        "title": "死要面子的经历，核市奇谭Vol.120",
+        "summary": "本期时间轴制作：老斧子出差归来的第一期节目，今天想聊聊死要面子的经历（但是聊着聊着，好像主题逐渐变成了“尴尬的事儿”），后面也提到了我们最近看的几部电影，和《只剩你一个》《追捕祝融星》两本书。",
+        "source": "📰 机核",
+        "source_url": "https://www.gcores.com/radios/216332",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "游戏光盘时代结束：为索尼立功，被索尼终结",
+        "summary": "作者：Nick编辑：柏亚舟7月1日，一则震荡游戏界的大新闻登上头条。索尼互动娱乐宣布，将于2028年1月起取消 PlayStation 平台所有新游戏的实体光盘生产。索尼互娱认为，“消费者对数字媒体的偏好正逐渐超越实体光盘”。“为适应这一行业趋势”，他们做出了上述决定。\n据悉，2028年1月后...",
+        "source": "📰 机核",
+        "source_url": "https://www.gcores.com/articles/216743",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "《战锤40K：战争黎明4》公布最新实机演示",
+        "summary": "《战锤40K：战争黎明4》于今日公布最新实机演示。本次演示中，游戏创意总监与资深游戏设计师之间进行了的1v1对决，带领玩家全方位深入领略游戏多人对战的魅力。开发团队确认，玩家可在正式版中体验超过 70 个史诗战役任务以及值得一玩再玩的背水一战 (Last Stand)、小规模冲突 (Skirm...",
+        "source": "📰 机核",
+        "source_url": "https://www.gcores.com/articles/216741",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "二班老猫活了！｜机事本6.13-7.3",
+        "summary": "【机事本】是机核文章区的栏目，每周五更新。每周五下班之前，我们会收集几位编辑的“小作文”，题材随意，立意自选，栏目名取自Windows系统自带的最轻便的文本编辑器，代表“轻便与畅快”。本周出场人物：Jerry，雪豆，搞搞Jerry：没那么简单刚刚结束的深圳核聚变，我最明显的感受是：被人叫住一起...",
+        "source": "📰 机核",
+        "source_url": "https://www.gcores.com/articles/216739",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "希望能与大家引起共鸣：机核采访《东京叙事集》制作人",
+        "summary": "在刚刚举办的核聚变20206深圳站中，发行商Happinet带来了在今年Bit Summit会展中颇受关注的独立游戏《东京叙事集》（Tokyo Stories）的试玩版本。本作于2023年放出了首支概念短片，但在之后陷入到了开发停滞的阶段，直到今年5月才重新回到正轨。\n藉由本次机会，机核也有幸...",
+        "source": "📰 机核",
+        "source_url": "https://www.gcores.com/articles/216731",
+        "approved": true,
+        "approval_reason": ""
+      }
+    ],
+    "games": [
+      {
+        "title": "《索尼克赛车：交叉世界》带来本体化重要更新：目前，游戏已正式上线官方中文配音",
+        "summary": "前段时间，触乐受世嘉邀请参加了B站&ldquo;游先看&rdquo;试玩发布会。发布会现场提供了多款新游戏内容供参与者试玩，其中尤其特殊的是一款产品是《索尼克赛车：交叉世界》，自2025年初正式发售后，与这款游戏的相关线下活动、赛事总是不断，本次发布会上，触乐体验了这款游戏季票2的前瞻内容，包...",
+        "source": "📰 触乐",
+        "source_url": "http://www.chuapp.com/article/291463.html",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "“我这辈子都忘不了《原神：空月之歌》了”",
+        "summary": "从逃生舱里爬出来，你看到空灵的雾气。远处的星球在视野的中央，正前方的塔光宛如舒展开两侧薄纱。高大的石柱悬空而起，地面此起彼伏，四处是幽幽光点一般的小花。轻轻一跳，你的身体轻飘飘的，和空间站的感觉相似又不同。耳边，你的伙伴叽叽喳喳地说：&ldquo;终于来到了月亮上&hellip;&hellip...",
+        "source": "📰 触乐",
+        "source_url": "http://www.chuapp.com/article/291462.html",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "触乐怪话：“都是数字平台，我为什么不选Steam？”",
+        "summary": "触乐怪话，每天胡侃和游戏有关的屁事、鬼事、新鲜事。\n\n\n图/小罗\n\n最近，索尼公布了一件事：从2028年1月起，所有新发布于PlayStation主机上的物理光盘的生产将被停止。在此日期之后，新游戏将仅以数字格式在PS商店和零售商处提供。\n直白一点说就是，2028年以后，PS游戏没有实体版了。...",
+        "source": "📰 触乐",
+        "source_url": "http://www.chuapp.com/article/291458.html",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "2026 TapTap游戏发布会：从发现到创造，游戏离玩家更近了",
+        "summary": "7月2日晚19:30，2026年TapTap游戏发布会照例以全网直播的形式与玩家见面。一个半小时的发布会中，52款游戏及应用带来了各自的最新消息。从数量来看，这是一场内容相当充实的发布会。开放世界、动作冒险、射击、Roguelike、战棋、模拟经营、解谜、音乐游戏、独立游戏，乃至AI创作工具，...",
+        "source": "📰 触乐",
+        "source_url": "http://www.chuapp.com/article/291459.html",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "《伊莫》“握爪测试”开启：一个更生动与广阔的抓宠世界",
+        "summary": "今天（2026年7月2日），爪印工作室开发的多人大世界捉宠RPG《伊莫》开启了&ldquo;握爪测试&rdquo;。这是游戏进行的第三次封闭内测。触乐应邀提前体验了部分新增和优化的内容，包括这一版本推出的新伊莫和新野外Boss、NPC对战、获取虹光伊莫的&ldquo;滋养&rdquo;系统以及...",
+        "source": "📰 触乐",
+        "source_url": "http://www.chuapp.com/article/291455.html",
+        "approved": true,
+        "approval_reason": ""
+      }
+    ],
+    "sports": [],
+    "history": [],
+    "ai_tech": [
+      {
+        "title": "住久了没意思（四）：作为最「复合」的空间，客厅要为真实生活让路",
+        "summary": "前文回顾：租房常见问题与我的改造原则从有光的地方开始动手打造能好好放松的卧室只要你的房子还有分区可言，那正常情况下就一定有一个可以称之为客厅的区域。在第一篇文章中我已经提到，对我们很多人来说，客厅可能 ...查看全文本文为会员文章，出自《单篇文章》，订阅后可阅读全文。",
+        "source": "📰 少数派",
+        "source_url": "https://sspai.com/prime/story/how-to-design-a-rental-living-room",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "本周看什么 | 最近值得一看的 11 部作品",
+        "summary": "📅本周新预告《奥德赛》终极预告7月1日，克里斯托弗·诺兰导演新作《奥德赛》发布了终极预告，北美7月17日、中国内地8月14日上映。马特·达蒙、汤姆·霍兰德、安妮·海瑟薇、赞达亚、露皮塔·尼永奥、罗伯特 ...查看全文",
+        "source": "📰 少数派",
+        "source_url": "https://sspai.com/post/111917",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "快捷指令｜让 iPhone 用上锤子的「大爆炸」",
+        "summary": "敬「少许的牺牲是必要的」。查看全文",
+        "source": "📰 少数派",
+        "source_url": "https://sspai.com/post/111405",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "这四个工作习惯，或许也能帮你找到掌控感",
+        "summary": "无论你追求的是更高的职位、更自由的时间、还是某种更纯粹的成就感，有一件事大概是共通的：那就是尽量让自己的人生，少一点完全依赖运气的成分，多一点可被掌控、可被验证的路径。查看全文",
+        "source": "📰 少数派",
+        "source_url": "https://sspai.com/post/111708",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "派早报：大疆发布 DJI Mic Mini 2S 迷你无线麦克风等",
+        "summary": "Apple「隐藏邮件地址」功能存在隐私漏洞，System76 推出 Linux 轻薄本 Lemur Pro 等。查看全文",
+        "source": "📰 少数派",
+        "source_url": "https://sspai.com/post/111898",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "领克 20 无伪装实车图曝光，预计三季度上市",
+        "summary": "IT之家 7 月 3 日消息，博主 @SugarDesign 今日分享了领克 20 无伪装实车图，该车计划今年三季度正式上市。新车预计基于领克 Z20 升级，官方此前预热称领克 20 外观造型更精致、运动感再升级；新增激光雷达，高阶智驾能力全面提升；运动基因与智能科技双向突破。据IT之家此前报...",
+        "source": "📰 IT之家",
+        "source_url": "https://www.ithome.com/0/972/459.htm",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "消息称字节豆包视频生成模型 Seedance 2.5 预计 7 月 6 日上线体验中心，一周后开放 API",
+        "summary": "IT之家 7 月 3 日消息，据 AI 普瑞斯消息，字节豆包视频生成模型 Seedance 2.5 预计 7 月 6 日上线体验中心，将在一周后开放 API。据IT之家此前报道，字节豆包视频生成模型 Seedance 2.5 发布于 6 月 23 日，该模型目前处于全球企业内测阶段。据介绍，S...",
+        "source": "📰 IT之家",
+        "source_url": "https://www.ithome.com/0/972/458.htm",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "首发 10899 元：微星神影 16 魔龙姬限定款游戏本价格公布，i9-14900HX + RTX 5060",
+        "summary": "IT之家 7 月 3 日消息，微星宣布推出神影 16 魔龙姬限定版 2026 新品，首发价不高于 10899 元，叠加学生优惠及国补后到手价 9199 元，预计 7 月 13 日 20:00 开售。京东微星（MSI）神影 16 魔龙姬限定款 16 英寸游戏笔记本电脑酷睿 i9-14900HX ...",
+        "source": "📰 IT之家",
+        "source_url": "https://www.ithome.com/0/972/457.htm",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "华为 Mate 80 Pro 性能解禁：麒麟 9030 Pro GPU 相比 9020 提升 76%，《原神》能效表现优于高通骁龙 8 Gen3",
+        "summary": "IT之家 7 月 3 日消息，华为去年发布了 Mate 80 系列旗舰手机，搭载华为自研的麒麟 9030 及麒麟 9030 Pro 处理器。今日，B站 up 主 @极客湾 放出了一期针对华为 Mate 80 Pro 的性能分析报告。据介绍，这两款芯片均基于同一种 Die，估算约有 150 亿晶...",
+        "source": "📰 IT之家",
+        "source_url": "https://www.ithome.com/0/972/456.htm",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "京东方：已成立 Micro LED 光互连系统及玻璃载板 CPO 技术攻关项目组",
+        "summary": "IT之家 7 月 3 日消息，京东方发布最新投资者关系活动记录表，介绍了相关业务的最新进展。在光互连方面，京东方称目前已成立 Micro LED 光互连系统及玻璃载板 CPO 技术攻关项目组，和生态伙伴进行前瞻技术预研，加快技术攻关。合作方面，京东方与康宁的合作已迈入实质性阶段，双方共同推进玻...",
+        "source": "📰 IT之家",
+        "source_url": "https://www.ithome.com/0/972/455.htm",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "400家starup聚集、阿斯利康重押13亿欧元，创新药出海欧洲绕不开这座城｜最前线",
+        "summary": "文｜胡香赟\n  编辑｜海若镜\n  2026年6月底，西班牙瓦尔德希伯伦大学医院（Vall d’Hebron University Hospital）宣布完成欧洲首例单孔机器人儿科肾输尿管切除术。\n  瓦尔德希伯伦大学医院是西班牙规模最大的综合医院之一，年接诊量过百万人次，在整个欧洲医疗系统内，...",
+        "source": "📰 36氪",
+        "source_url": "https://36kr.com/p/3879807100023040?f=rss",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "秋声 | 袁进辉新公司冲港股IPO，成立不到三年",
+        "summary": "本文约2700字，建议阅读6分钟\n  作者&nbsp;|&nbsp;彭孝秋\n  \n   编者按：AI大爆发之际，越来越多公司走向资本市场。每一份招股书翻动的声音里，都藏着一家公司想说与未曾明说的全部。\n   鉴于此，硬氪特推出「秋声」专栏。秋声取自欧阳修《秋声赋》，借“听秋声”之意，产业冷暖，...",
+        "source": "📰 36氪",
+        "source_url": "https://36kr.com/p/3879814941437956?f=rss",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "氪星晚报｜西贝餐饮集团退出小女当家；FF洛杉矶总部人去楼空？公司回应：不实",
+        "summary": "大公司：\n  德银：Meta云业务或打开千亿美元级AI投入变现通道，2027年收入最高增300亿美元\n  针对Meta拟向外部客户出售AI算力及模型访问权限的消息，德意志银行认为，这并不意味着Meta削弱前沿模型或“超级智能”布局，而更可能是将较旧、非核心或阶段性闲置的算力对外变现，同时保留最...",
+        "source": "📰 36氪",
+        "source_url": "https://36kr.com/p/3879796756754694?f=rss",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "理想组织再动刀：去中间环节，整车和智驾产品回归研发｜36氪独家",
+        "summary": "图源视觉中国\n  文｜肖漫编辑｜李勤、杨轩\n  “回归创业状态”，去年李想说出这个目标后，理想汽车还在进行组织和流程精简。\n  36氪汽车从多位知情人士处获悉，理想即将围绕产品决策流程进行新一轮组织架构调整，计划将产品部的部分关键职能拆分，并入研发部门。\n  从群组关系来看，理想汽车产品部由范...",
+        "source": "📰 36氪",
+        "source_url": "https://36kr.com/p/3877919172047111?f=rss",
+        "approved": true,
+        "approval_reason": ""
+      },
+      {
+        "title": "36氪首发 | 获宁德时代旗下基金领投数千万美元，智能出行公司上市首月已成印尼电摩品类订单第一",
+        "summary": "作者&nbsp;|&nbsp;张子怡\n  编辑&nbsp;|&nbsp;袁斯来\n  硬氪获悉，智能两轮出行企业「OMOWAY」（目蔚科技）近期连续完成A轮和A+轮融资，单轮融资金额均为数千万美元。其中，A+轮由宁德时代支持设立的美元基金Lochpine Capital领投，A轮由Monolit...",
+        "source": "📰 36氪",
+        "source_url": "https://36kr.com/p/3877990989819909?f=rss",
+        "approved": true,
+        "approval_reason": ""
+      }
+    ]
+  }
+}

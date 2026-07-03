@@ -95,6 +95,39 @@ class VocabularyRepository:
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_collocations_word ON word_collocations(word)
         """)
+        # 学习掌握度表
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS word_mastery (
+                word TEXT PRIMARY KEY,
+                mastery_score INTEGER NOT NULL DEFAULT 0,
+                seen_count INTEGER NOT NULL DEFAULT 0,
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                correct_count INTEGER NOT NULL DEFAULT 0,
+                wrong_count INTEGER NOT NULL DEFAULT 0,
+                last_seen_at TIMESTAMP,
+                last_attempted_at TIMESTAMP,
+                last_quality INTEGER,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (word) REFERENCES words(word)
+            )
+        """)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS learning_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                word TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                quality INTEGER,
+                mastery_delta INTEGER NOT NULL DEFAULT 0,
+                user_text TEXT NOT NULL DEFAULT '',
+                ai_feedback TEXT NOT NULL DEFAULT '',
+                error_type TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (word) REFERENCES words(word)
+            )
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_learning_events_word ON learning_events(word)
+        """)
         self._conn.commit()
 
     # ── 增 ──
@@ -149,6 +182,84 @@ class VocabularyRepository:
         self._conn.commit()
         for w in words:
             self._save_word_children(w)
+
+    def record_learning_event(
+        self,
+        word: str,
+        event_type: str,
+        quality: Optional[int] = None,
+        mastery_delta: int = 0,
+        user_text: str = "",
+        ai_feedback: str = "",
+        error_type: Optional[str] = None,
+    ):
+        """记录一次学习事件。"""
+        self._conn.execute("""
+            INSERT INTO learning_events
+                (word, event_type, quality, mastery_delta, user_text, ai_feedback, error_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (word, event_type, quality, mastery_delta, user_text, ai_feedback, error_type))
+        self._conn.commit()
+
+    def get_word_mastery(self, word: str) -> Optional[dict]:
+        """获取一个词的掌握度信息。"""
+        row = self._conn.execute(
+            "SELECT * FROM word_mastery WHERE word = ?", (word,)
+        ).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def update_word_mastery(
+        self,
+        word: str,
+        mastery_score: int,
+        seen_count: Optional[int] = None,
+        attempt_count: Optional[int] = None,
+        correct_count: Optional[int] = None,
+        wrong_count: Optional[int] = None,
+        last_seen_at: Optional[str] = None,
+        last_attempted_at: Optional[str] = None,
+        last_quality: Optional[int] = None,
+    ) -> None:
+        """新增或更新一个词的掌握度记录。"""
+        existing = self.get_word_mastery(word) or {}
+        payload = {
+            "word": word,
+            "mastery_score": mastery_score,
+            "seen_count": seen_count if seen_count is not None else existing.get("seen_count", 0),
+            "attempt_count": attempt_count if attempt_count is not None else existing.get("attempt_count", 0),
+            "correct_count": correct_count if correct_count is not None else existing.get("correct_count", 0),
+            "wrong_count": wrong_count if wrong_count is not None else existing.get("wrong_count", 0),
+            "last_seen_at": last_seen_at if last_seen_at is not None else existing.get("last_seen_at"),
+            "last_attempted_at": last_attempted_at if last_attempted_at is not None else existing.get("last_attempted_at"),
+            "last_quality": last_quality if last_quality is not None else existing.get("last_quality"),
+        }
+        self._conn.execute("""
+            INSERT OR REPLACE INTO word_mastery
+                (word, mastery_score, seen_count, attempt_count, correct_count, wrong_count,
+                 last_seen_at, last_attempted_at, last_quality, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (
+            payload["word"],
+            payload["mastery_score"],
+            payload["seen_count"],
+            payload["attempt_count"],
+            payload["correct_count"],
+            payload["wrong_count"],
+            payload["last_seen_at"],
+            payload["last_attempted_at"],
+            payload["last_quality"],
+        ))
+        self._conn.commit()
+
+    def get_weak_words(self, limit: int = 20) -> List[str]:
+        """返回掌握度最低的一批词。"""
+        rows = self._conn.execute(
+            "SELECT word FROM word_mastery ORDER BY mastery_score ASC, updated_at ASC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [row["word"] for row in rows]
 
     # ── 查 ──
 

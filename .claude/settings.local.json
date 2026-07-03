@@ -22,7 +22,18 @@
       "Bash(git commit -m ' *)",
       "Bash(git remote *)",
       "Bash(git push *)",
-      "Bash(gh auth *)"
+      "Bash(gh auth *)",
+      "Bash(git *)",
+      "WebFetch(domain:www.adaptemy.com)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:patentimages.storage.googleapis.com)",
+      "WebFetch(domain:www.super-memory.com)",
+      "Bash(PYTHONPATH=src pytest *)",
+      "Bash(rg *)",
+      "Bash(sqlite3 data/db/language_learner.db \"SELECT COUNT\\(*\\) as total FROM words;\")",
+      "Bash(sqlite3 data/db/language_learner.db \"SELECT level, COUNT\\(*\\) FROM words GROUP BY level;\")",
+      "Bash(sqlite3 data/db/language_learner.db \"SELECT word, definition_cn FROM words LIMIT 5;\")",
+      "Bash(sqlite3 data/db/language_learner.db \"SELECT COUNT\\(DISTINCT word\\) FROM word_sentences;\")"
     ]
   }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""端侧AI语言学习机 — Line C 开发版入口。
+"""端侧AI语言学习机 — Line C v2 入口。
 
 启动方式：
     python src/main.py                  # 默认 MockLLM
@@ -24,7 +24,11 @@ from PyQt5.QtWidgets import QApplication
 
 from line_c.config import DATABASE_PATH, CLOUD_API_URL, CLOUD_API_KEY
 from line_c.engine.vocabulary_repository import VocabularyRepository
-from line_c.engine.conversation_manager import ConversationManager
+from line_c.engine.user_repository import UserRepository
+from line_c.engine.chat_session_repository import ChatSessionRepository
+from line_c.engine.user_vocabulary_repository import UserVocabularyRepository
+from line_c.engine.topic_generator import TopicGenerator
+from line_c.engine.rss_feed_fetcher import RSSFeedFetcher
 from line_c.llm.mock_llm import MockLLM
 from line_c.llm.cloud_llm import CloudLLM
 from line_c.tts.mock_tts import MockTTS
@@ -49,50 +53,72 @@ def create_llm(backend: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="端侧AI语言学习机 - Line C")
+    parser = argparse.ArgumentParser(description="端侧AI语言学习机 - Line C v2")
     parser.add_argument(
         "--llm", choices=["mock", "cloud"], default="mock",
         help="LLM 后端选择 (默认: mock)"
     )
     args = parser.parse_args()
 
-    # 1. 初始化数据库
-    repo = VocabularyRepository(DATABASE_PATH)
-    word_count = repo.word_count()
-    print(f"数据库已连接: {DATABASE_PATH} ({word_count} 词)")
+    # ── 初始化数据库 ──
+    db_path = DATABASE_PATH
+    vocab_repo = VocabularyRepository(db_path)
+    user_repo = UserRepository(db_path)
+    chat_session_repo = ChatSessionRepository(db_path)
+    user_vocab_repo = UserVocabularyRepository(db_path)
+
+    word_count = vocab_repo.word_count()
+    print(f"数据库已连接: {db_path} ({word_count} 词)")
+    print(f"角色数: {user_repo.count()}")
 
     if word_count == 0:
         print("提示：词库为空，请先运行 scripts/import_vocabulary.py 导入词汇数据")
-        print("  python scripts/import_vocabulary.py")
-        repo.close()
-        sys.exit(1)
+        # 不退出，允许创建角色和浏览界面
 
-    # 2. 创建 LLM
+    # ── 创建 LLM ──
     llm = create_llm(args.llm)
 
-    # 3. 创建 TTS（开发阶段用 MockTTS，真机换 PiperTTS）
+    # ── 创建 TTS ──
     tts = MockTTS(verbose=(args.llm == "mock"))
 
-    # 4. 创建对话管理器
-    manager = ConversationManager(llm=llm, repository=repo, tts=tts)
+    # ── 创建 RSS 抓取器 + 话题生成器 ──
+    rss_fetcher = RSSFeedFetcher()
+    # RSS 优先，LLM 为备选
+    topic_gen = TopicGenerator(
+        llm=llm if args.llm == "cloud" else None,
+        rss_fetcher=rss_fetcher,
+    )
 
-    # 5. 启动会话（以日常聊天话题开始）
-    manager.start_session(topic="daily life")
-
-    # 6. Qt 应用
+    # ── Qt 应用 ──
     app = QApplication(sys.argv)
-    window = MainWindow(manager)
+
+    # ── 主窗口 ──
+    window = MainWindow(
+        user_repo=user_repo,
+        chat_session_repo=chat_session_repo,
+        user_vocab_repo=user_vocab_repo,
+        vocab_repo=vocab_repo,
+        llm=llm,
+        tts=tts,
+    )
+    # 注入话题生成器
+    window.topic_feed_page.set_topic_generator(topic_gen)
     window.show()
 
-    print(f"话题: {manager.topic}")
-    print("界面已启动。聊天中遇到的 CET 词汇会自动出现在面板中。")
+    print("VocaLand v2 界面已启动。")
+    print("  首页：选择或创建角色")
+    print("  话题页：选择话题开始聊天")
+    print("  聊天页：点击不认识的单词查释义")
+    print("  复习页：闪卡式生词复习")
     print("关闭窗口退出。")
 
     exit_code = app.exec_()
 
     # 清理
-    manager.srs  # 确保析构
-    repo.close()
+    vocab_repo.close()
+    user_repo.close()
+    chat_session_repo.close()
+    user_vocab_repo.close()
     sys.exit(exit_code)
 
 

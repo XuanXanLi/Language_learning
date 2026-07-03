@@ -83,12 +83,21 @@ class WordSummary(QWidget):
         manager.word_event.connect(summary.on_word_event)
     """
 
+    PRIORITY = {
+        "target": 1,
+        "used": 2,
+        "learning": 3,
+    }
+    TAGS = {
+        "target": ("目标词", "purple"),
+        "used": ("你用过", "green"),
+        "learning": ("复习中", "blue"),
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self._target: list = []     # AI 翻译引入的目标词
-        self._used: list = []       # 用户用过的英文词
-        self._learning: list = []   # 进入复习的英文词
+        self._words: dict = {}
 
         self.setStyleSheet("background: transparent;")
 
@@ -124,26 +133,17 @@ class WordSummary(QWidget):
 
         event: "target" | "used" | "learning"
         """
-        entry = (word, "")
+        if event not in self.PRIORITY:
+            return
 
-        if event == "target":
-            if not any(w[0] == word for w in self._target):
-                self._target.append(entry)
-
-        elif event == "used":
-            if not any(w[0] == word for w in self._used):
-                self._used.append(entry)
-
-        elif event == "learning":
-            if not any(w[0] == word for w in self._learning):
-                self._learning.append(entry)
+        existing = self._words.get(word)
+        if existing is None or self.PRIORITY[event] >= self.PRIORITY[existing["event"]]:
+            self._words[word] = {"event": event, "state": state}
 
         self._rebuild()
 
     def reset(self):
-        self._target.clear()
-        self._used.clear()
-        self._learning.clear()
+        self._words.clear()
         self._rebuild()
 
     def _rebuild(self):
@@ -153,9 +153,7 @@ class WordSummary(QWidget):
             if item and item.widget():
                 item.widget().deleteLater()
 
-        has_any = any([self._target, self._used, self._learning])
-
-        if not has_any:
+        if not self._words:
             empty = QLabel("等待对话开始...\n用中文问词，或用英文聊天，\n词汇会自动出现在这里")
             f = QFont(); f.setPixelSize(11); empty.setFont(f)
             empty.setStyleSheet("color: #9CA3AF; padding: 20px; background: transparent;")
@@ -164,16 +162,13 @@ class WordSummary(QWidget):
             self.content_layout.addWidget(empty)
             return
 
-        for word, _ in self._target:
-            card = _VocabCard(word, "", "目标词", "purple")
-            self.content_layout.addWidget(card)
-
-        for word, _ in self._used:
-            card = _VocabCard(word, "", "你用过", "green")
-            self.content_layout.addWidget(card)
-
-        for word, _ in self._learning:
-            card = _VocabCard(word, "", "复习中", "blue")
+        ordered = sorted(
+            self._words.items(),
+            key=lambda item: self.PRIORITY[item[1]["event"]],
+        )
+        for word, info in ordered:
+            tag_text, color = self.TAGS[info["event"]]
+            card = _VocabCard(word, "", tag_text, color)
             self.content_layout.addWidget(card)
 
         self.content_layout.addStretch()

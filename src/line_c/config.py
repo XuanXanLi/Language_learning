@@ -10,6 +10,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 # 数据库文件路径（SQLite 单个文件）
 DATABASE_PATH = PROJECT_ROOT / "data" / "db" / "language_learner.db"
 
+# RSS 持久化缓存（每日拉取一次，跨天自动刷新）
+RSS_CACHE_DIR = PROJECT_ROOT / "data" / "rss"
+RSS_CACHE_FILE = RSS_CACHE_DIR / "feed_cache.json"
+
 # LLM 后端选择: "mock" | "ollama" | "cloud" | "rkllm"
 LLM_BACKEND = "mock"
 

@@ -129,3 +129,46 @@ class TestVocabularyRepository:
     def test_empty_repo_count(self, repo):
         """空数据库词数应为 0。"""
         assert repo.word_count() == 0
+
+    def test_learning_tables_created(self, repo):
+        """新仓库应该包含掌握度表和学习事件表。"""
+        mastery = repo._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='word_mastery'"
+        ).fetchone()
+        events = repo._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='learning_events'"
+        ).fetchone()
+        assert mastery is not None
+        assert events is not None
+
+    def test_update_and_get_word_mastery(self, populated_repo):
+        """掌握度记录可以新增并读回。"""
+        populated_repo.update_word_mastery(
+            word="apple",
+            mastery_score=35,
+            seen_count=1,
+            attempt_count=2,
+            correct_count=1,
+            wrong_count=1,
+            last_quality=4,
+        )
+        mastery = populated_repo.get_word_mastery("apple")
+        assert mastery["mastery_score"] == 35
+        assert mastery["attempt_count"] == 2
+        assert mastery["last_quality"] == 4
+
+    def test_record_learning_event(self, populated_repo):
+        """学习事件可以保存到 learning_events 表。"""
+        populated_repo.record_learning_event(
+            word="apple",
+            event_type="correct_usage",
+            quality=4,
+            mastery_delta=15,
+            user_text="I eat an apple.",
+        )
+        row = populated_repo._conn.execute(
+            "SELECT * FROM learning_events WHERE word = ?", ("apple",)
+        ).fetchone()
+        assert row is not None
+        assert row["event_type"] == "correct_usage"
+        assert row["mastery_delta"] == 15

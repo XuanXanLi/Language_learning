@@ -1,9 +1,0 @@
-........................................................................ [ 86%]
-...........                                                              [100%]
-=============================== warnings summary ===============================
-src/line_c/engine/conversation_manager.py:62
-  /home/ros/ClaudeCode/Language_learner/src/line_c/engine/conversation_manager.py:62: DeprecationWarning: sipPyTypeDict() is deprecated, the extension module should use sipPyTypeDictRef() instead
-    class ConversationManager(QObject):
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-83 passed, 1 warning in 0.10s

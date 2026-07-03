@@ -261,3 +261,62 @@ class TestConversationManager:
         recent = mgr.get_recent_words()
         assert recent[0] == "curious"
         assert recent[1] == "discover"
+
+    def test_session_summary_includes_learning_report_fields(self, manager):
+        """会话摘要应该包含学习报告需要的字段。"""
+        manager.start_session(topic="daily life")
+        manager.handle_user_message("I am curious about science.")
+
+        summary = manager.get_session_summary()
+        assert "target_words" in summary
+        assert "correct_words" in summary
+        assert "wrong_words" in summary
+        assert "mastery_scores" in summary
+        assert "review_due" in summary
+
+    def test_pending_correction_clears_after_correct_retry(self, manager):
+        """错误后重试正确，应清除 pending correction。"""
+        manager.start_session(topic="daily life")
+        manager._pending_correction = {"word": "curious", "correction": "Use curious.", "explanation": ""}
+        manager._current_chinese = ["好奇"]
+
+        manager.handle_user_message("I am curious about science.")
+
+        assert manager._pending_correction is None
+        assert "curious" in manager.get_session_summary()["correct_words"]
+
+    def test_missing_target_emits_correction_feedback(self, manager, qapp):
+        """有 pending correction 时，没有使用目标词应显示纠错提示。"""
+        messages = []
+
+        def on_message(text, is_user):
+            messages.append((text, is_user))
+
+        manager.message_received.connect(on_message)
+        manager.start_session(topic="daily life")
+        manager._pending_correction = {"word": "curious", "correction": "Use curious.", "explanation": ""}
+        manager._target_words.add("curious")
+        manager._current_chinese = ["好奇"]
+
+        manager.handle_user_message("I like science.")
+
+        ai_messages = [text for text, is_user in messages if not is_user]
+        assert any("[纠错] curious" in text for text in ai_messages)
+        assert manager._pending_correction["word"] == "curious"
+
+    def test_free_chat_does_not_correct_missing_target(self, manager, qapp):
+        """自由聊天中没用目标词时，不应立刻弹出纠错。"""
+        messages = []
+
+        def on_message(text, is_user):
+            messages.append((text, is_user))
+
+        manager.message_received.connect(on_message)
+        manager.start_session(topic="daily life")
+        manager._target_words.update({"curious", "discover", "explore"})
+        manager.target_tracker._active_targets = ["curious", "discover", "explore"]
+
+        manager.handle_user_message("I like science.")
+
+        ai_messages = [text for text, is_user in messages if not is_user]
+        assert not any(text.startswith("[纠错]") for text in ai_messages)
