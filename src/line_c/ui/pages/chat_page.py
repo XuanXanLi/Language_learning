@@ -1,15 +1,19 @@
-"""聊天页 — 两栏布局 + 点击取词。
+"""聊天页 — 两栏布局 + 点击取词 + 语音输入/输出。
 
 左：对话气泡区（QLabel 自适应尺寸 + 点击取词）+ 输入框
 右：本次会话生词面板
+
+语音模式（--voice）：麦克风按钮 + 空格键 PTT + TTS 播放
 """
 
 import re
+import time
+import threading
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QScrollArea, QSizePolicy, QFrame,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject
 from PyQt5.QtGui import QFont, QFontMetrics
 
 from ..widgets.word_popup import WordPopup
@@ -158,10 +162,38 @@ class _TappableBubble(QLabel):
         return text[start:end+1]
 
 
+class _LlmWorker(QObject):
+    """在 QThread 上运行 LLM.chat()，避免阻塞 UI 主线程。
+
+    用法：
+        worker = _LlmWorker()
+        worker.moveToThread(llm_thread)
+        worker.response_ready.connect(on_response)
+        worker.do_chat(llm, system_prompt, messages)
+    """
+
+    response_ready = pyqtSignal(str, float)  # reply_text, latency_ms
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def do_chat(self, llm, system_prompt: str, messages: list):
+        """由主线程通过 queued slot 调用。"""
+        start = time.time()
+        try:
+            resp = llm.chat(system_prompt=system_prompt, messages=messages)
+            text = resp.text if resp else "Sorry, I didn't catch that."
+        except Exception:
+            text = "(网络问题，请重试)"
+        elapsed = (time.time() - start) * 1000
+        self.response_ready.emit(text, elapsed)
+
+
 class ChatPage(QWidget):
     """聊天页面 — 两栏布局。"""
 
     back_requested = pyqtSignal()
+    asr_result_ready = pyqtSignal(str)   # ASR 转写完成（跨线程）
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -178,6 +210,17 @@ class ChatPage(QWidget):
         self._send_debounce_timer = QTimer(self)
         self._send_debounce_timer.setSingleShot(True)
         self._send_debounce_timer.timeout.connect(self._do_send)
+
+        # ── 语音模式状态 ──
+        self._voice_mode = False
+        self._recording = False
+        self._asr = None
+        self._recorder = None
+        self._player = None
+        self._gpio_button = None
+        self._llm_worker = None
+        self._llm_thread = None
+        self._last_press_time = 0.0
 
         # ── 主布局（两栏）──
         main_layout = QHBoxLayout(self)
@@ -242,6 +285,24 @@ class ChatPage(QWidget):
         """)
         input_layout.addWidget(self.input_box, stretch=1)
 
+        # 麦克风按钮（语音模式）
+        self.mic_button = QPushButton("\U0001F3A4")
+        self.mic_button.setFixedSize(44, 44)
+        self.mic_button.setCursor(Qt.PointingHandCursor)
+        self.mic_button.setCheckable(True)
+        self.mic_button.setToolTip("点击录音 / 空格键长按")
+        self.mic_button.setStyleSheet("""
+            QPushButton {
+                background: #F3F4F6; border: 2px solid #E5E7EB;
+                border-radius: 12px; font-size: 18px; color: #6B7280;
+            }
+            QPushButton:checked {
+                background: #FEE2E2; border-color: #EF4444; color: #DC2626;
+            }
+        """)
+        self.mic_button.clicked.connect(self._on_mic_toggle)
+        input_layout.addWidget(self.mic_button)
+
         send_btn = QPushButton("发送")
         f = QFont(); f.setPixelSize(13); f.setBold(True); send_btn.setFont(f)
         send_btn.setFixedSize(64, 44)
@@ -255,6 +316,7 @@ class ChatPage(QWidget):
             }
             QPushButton:pressed { background: #6D28D9; }
         """)
+        self.send_btn = send_btn
         input_layout.addWidget(send_btn)
 
         left_layout.addLayout(input_layout)
@@ -336,6 +398,190 @@ class ChatPage(QWidget):
             f"让我们聊聊 <b>{topic}</b> 吧！你想说什么？"
         )
 
+    # ── 语音模式 ──────────────────────────────────────────
+
+    def setup_voice(self, asr, gpio_button=None):
+        """启用语音输入/输出模式。
+
+        在 main.py 中调用，注入 ASR 实例和 GPIO 按钮。
+
+        参数：
+        - asr: BaseASR 实例（MockASR 或 SenseVoiceASR）
+        - gpio_button: GpioButton 实例（ELF2 上用，PC 上传 None）
+        """
+        self._voice_mode = True
+        self._asr = asr
+
+        from line_c.audio.recorder import AudioRecorder
+        from line_c.audio.player import AudioPlayer
+
+        # ── 录音器（内部使用 threading.Thread）──
+        self._recorder = AudioRecorder()
+        self._recorder.recording_finished.connect(self._on_recording_finished)
+        self._recorder.recording_error.connect(self._on_recording_error)
+        self.asr_result_ready.connect(self._on_asr_result)
+
+        # ── 播放器（内部使用 threading.Thread）──
+        self._player = AudioPlayer()
+
+        # ── LLM 后台线程（需要 QThread 做 queued slot）──
+        self._llm_worker = _LlmWorker()
+        self._llm_thread = QThread(self)
+        self._llm_worker.moveToThread(self._llm_thread)
+        self._llm_worker.response_ready.connect(self._on_llm_response)
+        self._llm_thread.start()
+
+        # ── GPIO 物理按键（ELF2 专用）──
+        if gpio_button:
+            self._gpio_button = gpio_button
+            self._gpio_button.pressed.connect(self._on_ptt_pressed)
+            self._gpio_button.released.connect(self._on_ptt_released)
+            self._gpio_button.start()
+            self.mic_button.hide()  # 有硬件按键就隐藏屏幕按钮
+
+    # ── PTT 控制 ──────────────────────────────────────────
+
+    def _on_mic_toggle(self):
+        """屏幕麦克风按钮切换（PC 开发用）。"""
+        if self._recording:
+            self._stop_recording()
+        else:
+            self._start_recording()
+
+    def _on_ptt_pressed(self):
+        """物理按键按下 → 开始录音。"""
+        self._start_recording()
+
+    def _on_ptt_released(self):
+        """物理按键释放 → 停止录音。"""
+        if self._recording:
+            self._stop_recording()
+
+    def keyPressEvent(self, event):
+        """空格键长按 = PTT（PC 开发用）。"""
+        if event.key() == Qt.Key_Space and not event.isAutoRepeat():
+            self._start_recording()
+            return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """空格键释放 → 停止录音。"""
+        if event.key() == Qt.Key_Space and not event.isAutoRepeat():
+            if self._recording:
+                self._stop_recording()
+            return
+        super().keyReleaseEvent(event)
+
+    def _start_recording(self):
+        """开始录音：打断 TTS → 启动录音器。"""
+        if not self._voice_mode or self._recording:
+            return
+
+        # 软件去抖 300ms（防止快速双击）
+        now = time.monotonic() * 1000
+        if now - self._last_press_time < 300:
+            return
+        self._last_press_time = now
+
+        # 打断正在播放的 TTS
+        if self._player is not None:
+            self._player.stop()
+
+        self._recording = True
+        self._recorder.start()
+
+        # UI 反馈
+        self.mic_button.setChecked(True)
+        self.input_box.setPlaceholderText("\U0001F3A4 正在录音... 松开按钮结束")
+        self.input_box.setEnabled(False)
+
+    def _stop_recording(self):
+        """停止录音：停止录音器 → 触发 ASR。"""
+        if not self._recording:
+            return
+
+        self._recording = False
+        self._recorder.stop()
+
+        self.mic_button.setChecked(False)
+        self.input_box.setPlaceholderText("识别中...")
+        self.mic_button.setEnabled(False)
+
+    # ── ASR 管线 ──────────────────────────────────────────
+
+    def _on_recording_finished(self, pcm_data: bytes):
+        """录音完成 → 后台线程跑 ASR 转写。"""
+        if not pcm_data or len(pcm_data) < 3200:  # < 0.1 秒 = 误触
+            self._reset_input_state("输入你想说的话...（中文或英文）")
+            return
+
+        def _run():
+            try:
+                result = self._asr.transcribe(pcm_data)
+                text = result.text
+            except Exception:
+                text = ""
+            # pyqtSignal 自动跨线程排队到主线程
+            self.asr_result_ready.emit(text)
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_asr_result(self, text: str):
+        """ASR 结果回到主线程 → 填入输入框 → 自动发送。"""
+        self._reset_input_state("输入你想说的话...（中文或英文）")
+
+        if text and text.strip():
+            self.input_box.setPlainText(text.strip())
+            # 短暂延迟让用户看到识别结果，然后自动发送
+            QTimer.singleShot(200, self._on_send)
+
+    def _on_recording_error(self, error_msg: str):
+        """录音错误处理。"""
+        self._recording = False
+        self.mic_button.setChecked(False)
+        self._reset_input_state(f"录音错误: {error_msg[:30]}")
+        print(f"[AudioRecorder Error] {error_msg}")
+
+    def _reset_input_state(self, placeholder: str):
+        """恢复输入框到正常状态。"""
+        self.mic_button.setEnabled(True)
+        self.input_box.setEnabled(True)
+        self.input_box.setPlaceholderText(placeholder)
+
+    # ── LLM 后台调用 ──────────────────────────────────────
+
+    def _on_llm_response(self, reply_text: str, latency_ms: float):
+        """LLM 回复从后台线程回来 → 显示 + TTS 播放。"""
+        self._remove_typing_indicator()
+        self._add_bubble(reply_text, False)
+        self._conversation_history.append(
+            {"role": "assistant", "content": reply_text}
+        )
+        self.send_btn.setEnabled(True)
+
+        QTimer.singleShot(50, self._scroll_to_bottom)
+
+        # TTS 朗读 AI 回复
+        if self._tts is not None and self._tts.is_available():
+            self._speak_response(reply_text)
+
+    # ── TTS 播放 ──────────────────────────────────────────
+
+    def _speak_response(self, text: str):
+        """后台线程：TTS 合成 + 播放。"""
+
+        def _run():
+            try:
+                tts_resp = self._tts.speak(text)
+                if tts_resp and tts_resp.audio_bytes:
+                    self._player.play(tts_resp.audio_bytes)
+            except Exception:
+                pass  # TTS 失败不影响对话流
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    # ── 原有方法 ──────────────────────────────────────────
+
     def _clear_chat_area(self):
         """清空对话区（包括嵌套布局和所有组件）。"""
         while self.chat_layout.count():
@@ -372,7 +618,7 @@ class ChatPage(QWidget):
         self._send_debounce_timer.start(500)
 
     def _do_send(self):
-        """实际发送逻辑。"""
+        """实际发送逻辑。语音模式下 LLM 调用在后台线程。"""
         text = self.input_box.toPlainText().strip()
         if not text or not self._llm:
             return
@@ -382,9 +628,23 @@ class ChatPage(QWidget):
         self._add_bubble(text, True)
         self._conversation_history.append({"role": "user", "content": text})
 
-        # AI 回复
+        # AI 回复 — 语音模式走后台线程，否则走原有阻塞路径
         self._add_typing_indicator()
-        QTimer.singleShot(100, self._get_ai_response)
+
+        if self._voice_mode and self._llm_worker is not None:
+            # 语音模式：LLM 调用在后台 QThread，UI 不冻结
+            self.send_btn.setEnabled(False)
+            QTimer.singleShot(
+                0,
+                lambda: self._llm_worker.do_chat(
+                    self._llm,
+                    self._build_chat_prompt(),
+                    self._conversation_history[-6:],
+                ),
+            )
+        else:
+            # 原有路径（保持向后兼容）
+            QTimer.singleShot(100, self._get_ai_response)
 
     def _get_ai_response(self):
         """调用 LLM 获取回复。"""

@@ -32,6 +32,8 @@ from line_c.engine.rss_feed_fetcher import RSSFeedFetcher
 from line_c.llm.mock_llm import MockLLM
 from line_c.llm.cloud_llm import CloudLLM
 from line_c.tts.mock_tts import MockTTS
+from line_c.asr.mock_asr import MockASR
+from line_c.hardware.gpio_button import GpioButton
 from line_c.ui.main_window import MainWindow
 
 
@@ -57,6 +59,22 @@ def main():
     parser.add_argument(
         "--llm", choices=["mock", "cloud"], default="mock",
         help="LLM 后端选择 (默认: mock)"
+    )
+    parser.add_argument(
+        "--voice", action="store_true",
+        help="启用语音输入/输出模式（需要麦克风）"
+    )
+    parser.add_argument(
+        "--asr", choices=["mock"], default="mock",
+        help="ASR 后端选择 (默认: mock)"
+    )
+    parser.add_argument(
+        "--gpio-chip", default="",
+        help="GPIO 芯片路径 (ELF2 上默认 /dev/gpiochip0)"
+    )
+    parser.add_argument(
+        "--gpio-line", type=int, default=17,
+        help="GPIO 引脚号 (ELF2 上通过 gpioinfo 确认)"
     )
     args = parser.parse_args()
 
@@ -103,12 +121,39 @@ def main():
     )
     # 注入话题生成器
     window.topic_feed_page.set_topic_generator(topic_gen)
+
+    # ── 语音模式 ──
+    if args.voice:
+        asr = MockASR()
+        print(f"语音模式已启用 (ASR: {asr.name})")
+
+        # GPIO 按键（ELF2 专用，PC 上留空用键盘快捷键）
+        gpio_btn = None
+        if args.gpio_chip:
+            try:
+                gpio_btn = GpioButton(
+                    chip_path=args.gpio_chip, line_num=args.gpio_line
+                )
+                gpio_btn.start()
+                if gpio_btn.is_available():
+                    print(f"  GPIO 按键已连接: {args.gpio_chip} line {args.gpio_line}")
+                else:
+                    print(f"  GPIO 未检测到（PC 环境？），使用空格键代替")
+                    gpio_btn = None
+            except Exception as e:
+                print(f"  GPIO 初始化失败: {e}，使用空格键代替")
+                gpio_btn = None
+
+        window.chat_page.setup_voice(asr=asr, gpio_button=gpio_btn)
+
     window.show()
 
     print("VocaLand v2 界面已启动。")
     print("  首页：选择或创建角色")
     print("  话题页：选择话题开始聊天")
     print("  聊天页：点击不认识的单词查释义")
+    if args.voice:
+        print("  语音：空格键录音 / 点击麦克风按钮")
     print("  复习页：闪卡式生词复习")
     print("关闭窗口退出。")
 

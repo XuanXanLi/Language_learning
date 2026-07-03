@@ -17,6 +17,17 @@ RSS_CACHE_FILE = RSS_CACHE_DIR / "feed_cache.json"
 # LLM 后端选择: "mock" | "ollama" | "cloud" | "rkllm"
 LLM_BACKEND = "mock"
 
+# ASR 后端选择: "mock" | "sensevoice"
+ASR_BACKEND = "mock"
+
+# TTS 后端选择: "mock" | "piper"
+TTS_BACKEND = "mock"
+
+# 音频设备配置
+AUDIO_SAMPLE_RATE = 16000    # 采样率（SenseVoiceSmall 标准输入）
+AUDIO_CHANNELS = 1           # 单声道
+AUDIO_CHUNK_SIZE = 1024      # 每次读取的帧数
+
 # 云端 API 配置（选 cloud 时生效）
 CLOUD_API_URL = "https://api.deepseek.com/v1/chat/completions"
 CLOUD_API_KEY = ""  # 优先读环境变量，其次读 .deepseek_key 文件

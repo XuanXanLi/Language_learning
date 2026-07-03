@@ -1,2 +1,7 @@
 PyQt5==5.15.9
 requests==2.31.0
+pyaudio==0.2.11
+# ELF2 部署时额外安装（按需）：
+# gpiod==1.5.4            # GPIO 按键（需要 python3-libgpiod）
+# sherpa-onnx>=1.10.0     # ASR + TTS 运行时（需要 Line B 交付模型）
+# numpy>=1.24.0           # 音频采样转换（sherpa-onnx 依赖）
